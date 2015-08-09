@@ -1,4 +1,7 @@
 {
+  "action": "labeled",
   "number": 3549,
-  "merge_commit_sha": "417cb81681908830f9db1d1e16cf76d004884d34"
+  "pull_request": { 
+    "merge_commit_sha": "417cb81681908830f9db1d1e16cf76d004884d34"
+  }
 }

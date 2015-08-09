@@ -17,13 +17,13 @@ class CoreTeamMember(ndb.Model):
 
 class AuthToken(ndb.Model):
   service = ndb.StringProperty(indexed=True)
-  token = ndb.StringProperty(indexed=False)
+  token = ndb.StringProperty(indexed=True)
   
   @classmethod
   def forService(cls, service):
     auth = AuthToken.query().filter(AuthToken.service == service).get();
     if (auth is None):
-      auth = AuthToken(service=service, token="")
+      auth = AuthToken(service=service, token="-missing-")
       auth.put()
       return None
     else:
@@ -90,19 +90,28 @@ class WebHookPage(webapp2.RequestHandler):
     if (event[0] != 'pull_request'):
       self.response.out.write('Not pull_request got ' + event[0])
       return
+    data = json.loads(self.request.body)
+    if (data['action'] != 'labeled'):
+      return
     audit = Audit(
       event = event[0],
       delivery = self.request.headers["X-GitHub-Delivery"],
       body = self.request.body)
     audit.put()
-    data = json.loads(audit.body)
     self.token = AuthToken.forService('github')
     if (self.token is None):
       self.response.out.write('No auth token')
       return
     pr_number = str(data['number'])
-    sha = data['merge_commit_sha']
+    sha = data['pull_request']['merge_commit_sha']
     issueUrl = 'issues/' + pr_number
+    labelsResult = self.urlGET(issueUrl + '/labels')
+    hasMerge = False
+    for l in json.loads(labelsResult.content):
+      if (l['name'] == 'pr_action: merge'):
+        hasMerge = True
+    if (hasMerge == False):
+      return
     result = self.urlGET(issueUrl + '/events')
     if result.status_code == 200:
       mergeUser = None
@@ -114,7 +123,7 @@ class WebHookPage(webapp2.RequestHandler):
       if (mergeUser == None):
         return
       self.response.out.write('Merge action? ' + str(mergeUser) + '\n')
-      result = self.urlDELETE(issuesUrl + '/labels/pr_action:%20merge');
+      result = self.urlDELETE(issueUrl + '/labels/pr_action:%20merge');
       if (CoreTeamMember.forUsername(mergeUser) == None):
         self.response.out.write(mergeUser + ' is not a core team memmber with merge privlidges.')
         self.urlPOST(issueUrl + '/comments', {'body': 'User @' + mergeUser + ' does not have PR merging privlidges.'})
