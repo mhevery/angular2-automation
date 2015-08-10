@@ -50,9 +50,9 @@ class MainPage(webapp2.RequestHandler):
 
 
 class WebHookPage(webapp2.RequestHandler):
-  def urlMethod(self, method, url, payload):
+  def urlMethod(self, method, token, url, payload):
     fullUrl = "https://api.github.com/repos/angular/angular/" + url;
-    headers =  {"Authorization": "token " + self.token}
+    headers =  {"Authorization": "token " + token}
     if (payload != None):
       payload = json.dumps(payload)
     self.response.out.write(method)
@@ -64,17 +64,17 @@ class WebHookPage(webapp2.RequestHandler):
     self.response.out.write('\n')
     return response
   
-  def urlGET(self, url):
-    return self.urlMethod(urlfetch.GET, url, None);
+  def urlGET(self, token, url):
+    return self.urlMethod(urlfetch.GET, token, url, None);
     
-  def urlDELETE(self, url):
-    return self.urlMethod(urlfetch.DELETE, url, None);
+  def urlDELETE(self, token, url):
+    return self.urlMethod(urlfetch.DELETE, token, url, None);
     
-  def urlPOST(self, url, content):
-    return self.urlMethod(urlfetch.POST, url, content);
+  def urlPOST(self, token, url, content):
+    return self.urlMethod(urlfetch.POST, token, url, content);
     
-  def urlPATCH(self, url, content):
-    return self.urlMethod(urlfetch.PATCH, url, content);
+  def urlPATCH(self, token, url, content):
+    return self.urlMethod(urlfetch.PATCH, token, url, content);
     
   
   
@@ -98,21 +98,25 @@ class WebHookPage(webapp2.RequestHandler):
       delivery = self.request.headers["X-GitHub-Delivery"],
       body = self.request.body)
     audit.put()
-    self.token = AuthToken.forService('github')
-    if (self.token is None):
-      self.response.out.write('No auth token')
+    tokenComment = AuthToken.forService('github-comment')
+    tokenPush = AuthToken.forService('github-push')
+    if (tokenComment is None):
+      self.response.out.write('No comment token')
+      return
+    if (tokenPush is None):
+      self.response.out.write('No push token')
       return
     pr_number = str(data['number'])
     sha = data['pull_request']['merge_commit_sha']
     issueUrl = 'issues/' + pr_number
-    labelsResult = self.urlGET(issueUrl + '/labels')
+    labelsResult = self.urlGET(tokenPush, issueUrl + '/labels')
     hasMerge = False
     for l in json.loads(labelsResult.content):
       if (l['name'] == 'pr_action: merge'):
         hasMerge = True
     if (hasMerge == False):
       return
-    result = self.urlGET(issueUrl + '/events')
+    result = self.urlGET(tokenPush, issueUrl + '/events')
     if result.status_code == 200:
       mergeUser = None
       for e in json.loads(result.content):
@@ -123,17 +127,17 @@ class WebHookPage(webapp2.RequestHandler):
       if (mergeUser == None):
         return
       self.response.out.write('Merge action? ' + str(mergeUser) + '\n')
-      result = self.urlDELETE(issueUrl + '/labels/pr_action:%20merge');
+      result = self.urlDELETE(tokenPush, issueUrl + '/labels/pr_action:%20merge');
       if (CoreTeamMember.forUsername(mergeUser) == None):
         self.response.out.write(mergeUser + ' is not a core team memmber with merge privlidges.')
-        self.urlPOST(issueUrl + '/comments', {'body': 'User @' + mergeUser + ' does not have PR merging privlidges.'})
+        self.urlPOST(tokenComment, issueUrl + '/comments', {'body': 'User @' + mergeUser + ' does not have PR merging privlidges.'})
         return
       if (mergeUser != None): 
         branch = 'presubmit-' + mergeUser + '-pr-' + pr_number
-        self.urlPOST(issueUrl + '/comments', {'body': 'Merging PR #' + pr_number + ' on behalf of @' + mergeUser + ' to branch [' + branch + '](https://github.com/angular/angular/tree/' + branch + ').'})
-        response = self.urlPOST('git/refs', {'ref': 'refs/heads/' + branch, 'sha': sha})
+        self.urlPOST(tokenComment, issueUrl + '/comments', {'body': 'Merging PR #' + pr_number + ' on behalf of @' + mergeUser + ' to branch [' + branch + '](https://github.com/angular/angular/tree/' + branch + ').'})
+        response = self.urlPOST(tokenPush, 'git/refs', {'ref': 'refs/heads/' + branch, 'sha': sha})
         if (response.status_code == 422):
-          self.urlPATCH('git/refs/heads/' + branch, {'sha': sha, 'force': True})
+          self.urlPATCH(tokenPush, 'git/refs/heads/' + branch, {'sha': sha, 'force': True})
 
 
 
