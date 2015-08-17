@@ -129,8 +129,8 @@ class WebHookPage(webapp2.RequestHandler):
       self.response.out.write('Merge action? ' + str(mergeUser) + '\n')
       result = self.urlDELETE(tokenPush, issueUrl + '/labels/pr_action:%20merge');
       if (CoreTeamMember.forUsername(mergeUser) == None):
-        self.response.out.write(mergeUser + ' is not a core team memmber with merge privlidges.')
-        self.urlPOST(tokenComment, issueUrl + '/comments', {'body': 'User @' + mergeUser + ' does not have PR merging privlidges.'})
+        self.response.out.write(mergeUser + ' is not a core team memmber with merge privileges.')
+        self.urlPOST(tokenComment, issueUrl + '/comments', {'body': 'User @' + mergeUser + ' does not have PR merging privileges.'})
         return
       if (mergeUser != None): 
         branch = 'presubmit-' + mergeUser + '-pr-' + pr_number
