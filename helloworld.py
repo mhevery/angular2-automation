@@ -84,6 +84,10 @@ class WebHookPage(webapp2.RequestHandler):
     self.response.out.write('Hello WebHook!')
       
   def post(self):
+    # labels applied by the onduty to automate merges
+    merge_label = 'zomg_admin: do merge'
+    merge_label_uri_esc = 'zomg_admin:%20do%20merge'
+
     if (CoreTeamMember.forUsername('*') == None):
       CoreTeamMember(username = '*').put()      
     event = self.request.headers["X-Github-Event"],
@@ -112,24 +116,24 @@ class WebHookPage(webapp2.RequestHandler):
     labelsResult = self.urlGET(tokenPush, issueUrl + '/labels')
     hasMerge = False
     for l in json.loads(labelsResult.content):
-      if (l['name'] == 'pr_action: merge'):
+      if l['name'] == merge_label:
         hasMerge = True
-    if (hasMerge == False):
+    if not hasMerge:
       return
     result = self.urlGET(tokenPush, issueUrl + '/events')
     if result.status_code == 200:
       mergeUser = None
       for e in json.loads(result.content):
-        if e['event'] == 'labeled' and e['label']['name'] == 'pr_action: merge':
+        if e['event'] == 'labeled' and e['label']['name'] == merge_label:
           mergeUser = e['actor']['login'];
-        if e['event'] == 'unlabeled' and e['label']['name'] == 'pr_action: merge':
+        if e['event'] == 'unlabeled' and e['label']['name'] == merge_label:
           mergeUser = None
       if (mergeUser == None):
         return
       self.response.out.write('Merge action? ' + str(mergeUser) + '\n')
-      result = self.urlDELETE(tokenPush, issueUrl + '/labels/pr_action:%20merge');
+      result = self.urlDELETE(tokenPush, issueUrl + '/labels/' + merge_label_uri_esc);
       if (CoreTeamMember.forUsername(mergeUser) == None):
-        self.response.out.write(mergeUser + ' is not a core team memmber with merge privileges.')
+        self.response.out.write(mergeUser + ' is not a core team member with merge privileges.')
         self.urlPOST(tokenComment, issueUrl + '/comments', {'body': 'User @' + mergeUser + ' does not have PR merging privileges.'})
         return
       if (mergeUser != None): 
